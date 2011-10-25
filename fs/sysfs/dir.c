@@ -565,7 +565,8 @@ struct sysfs_dirent *sysfs_find_dirent(struct sysfs_dirent *parent_sd,
 				       const void *ns,
 				       const unsigned char *name)
 {
-	struct sysfs_dirent *sd;
+	struct rb_node *p = parent_sd->s_dir.name_tree.rb_node;
+	struct sysfs_dirent *found = NULL;
 
 	if (!!sysfs_ns_type(parent_sd) != !!ns) {
 		WARN(1, KERN_WARNING "sysfs: ns %s in '%s' for '%s'\n",
@@ -574,13 +575,33 @@ struct sysfs_dirent *sysfs_find_dirent(struct sysfs_dirent *parent_sd,
 		return NULL;
 	}
 
-	for (sd = parent_sd->s_dir.children; sd; sd = sd->s_sibling) {
-		if (sd->s_ns != ns)
-			continue;
-		if (!strcmp(sd->s_name, name))
-			return sd;
+	while (p) {
+		int c;
+#define node	rb_entry(p, struct sysfs_dirent, name_node)
+		c = strcmp(name, node->s_name);
+		if (c < 0) {
+			p = node->name_node.rb_left;
+		} else if (c > 0) {
+			p = node->name_node.rb_right;
+		} else {
+			found = node;
+			p = node->name_node.rb_left;
+		}
+#undef node
 	}
-	return NULL;
+
+	if (found) {
+		while (found->s_ns != ns) {
+			p = rb_next(&found->name_node);
+			if (!p)
+				return NULL;
+			found = rb_entry(p, struct sysfs_dirent, name_node);
+			if (strcmp(name, found->s_name))
+				return NULL;
+		}
+	}
+
+	return found;
 }
 
 /**
@@ -911,12 +932,28 @@ static struct sysfs_dirent *sysfs_dir_pos(const void *ns,
 			pos = NULL;
 	}
 	if (!pos && (ino > 1) && (ino < INT_MAX)) {
-		pos = parent_sd->s_dir.children;
-		while (pos && (ino > pos->s_ino))
-			pos = pos->s_sibling;
+		struct rb_node *p = parent_sd->s_dir.inode_tree.rb_node;
+		while (p) {
+#define node	rb_entry(p, struct sysfs_dirent, inode_node)
+			if (ino < node->s_ino) {
+				pos = node;
+				p = node->inode_node.rb_left;
+			} else if (ino > node->s_ino) {
+				p = node->inode_node.rb_right;
+			} else {
+				pos = node;
+				break;
 			}
-	while (pos && pos->s_ns != ns)
-		pos = pos->s_sibling;
+#undef node
+		}
+	}
+	while (pos && pos->s_ns != ns) {
+		struct rb_node *p = rb_next(&pos->inode_node);
+		if (!p)
+			pos = NULL;
+		else
+			pos = rb_entry(p, struct sysfs_dirent, inode_node);
+	}
 	return pos;
 }
 
@@ -924,10 +961,13 @@ static struct sysfs_dirent *sysfs_dir_next_pos(const void *ns,
 	struct sysfs_dirent *parent_sd,	ino_t ino, struct sysfs_dirent *pos)
 {
 	pos = sysfs_dir_pos(ns, parent_sd, ino, pos);
-	if (pos)
-		pos = pos->s_sibling;
-	while (pos && pos->s_ns != ns)
-		pos = pos->s_sibling;
+	if (pos) do {
+		struct rb_node *p = rb_next(&pos->inode_node);
+		if (!p)
+			pos = NULL;
+		else
+			pos = rb_entry(p, struct sysfs_dirent, inode_node);
+	} while (pos && pos->s_ns != ns);
 	return pos;
 }
 
