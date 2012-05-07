@@ -189,32 +189,6 @@ static int __sync_inode(struct inode *inode, int datasync)
 	return ret;
 }
 
-/**
- * __sync_file - generic_file_fsync without the locking and filemap_write
- * @inode:	inode to sync
- * @datasync:	only sync essential metadata if true
- *
- * This is just generic_file_fsync without the locking.  This is needed for
- * nojournal mode to make sure this inodes data/metadata makes it to disk
- * properly.  The i_mutex should be held already.
- */
-static int __sync_inode(struct inode *inode, int datasync)
-{
-	int err;
-	int ret;
-
-	ret = sync_mapping_buffers(inode->i_mapping);
-	if (!(inode->i_state & I_DIRTY))
-		return ret;
-	if (datasync && !(inode->i_state & I_DIRTY_DATASYNC))
-		return ret;
-
-	err = sync_inode_metadata(inode, 1);
-	if (ret == 0)
-		ret = err;
-	return ret;
-}
-
 /*
  * akpm: A new design for ext4_sync_file().
  *
