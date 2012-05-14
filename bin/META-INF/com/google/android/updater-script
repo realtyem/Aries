@@ -9,5 +9,5 @@ package_extract_dir("kernel", "/tmp");
 ui_print("Installing kernel...");
 set_perm(0, 0, 0777, "/tmp/bml_over_mtd");
 set_perm(0, 0, 0777, "/tmp/bml_over_mtd.sh");
-assert(write_raw_image("/tmp/zImage", "boot"), run_program("/tmp/bml_over_mtd.sh", "boot", "72", "reservoir", "2004", "/tmp/zImage"), delete("/tmp/zImage"));
+assert(write_raw_image("/tmp/boot.img", "boot"), run_program("/tmp/bml_over_mtd.sh", "boot", "72", "reservoir", "2004", "/tmp/boot.img"), delete("/tmp/boot.img"));
 ui_print("Done!");
